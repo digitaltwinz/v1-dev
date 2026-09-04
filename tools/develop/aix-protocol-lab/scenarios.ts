@@ -60,6 +60,8 @@ export interface LabScenario {
   description: string;
   system?: string;
   prompt: string;
+  /** prior turns appended after the prompt as model/user pairs - multi-turn shapes (prefix-cache extension at item boundaries) */
+  followups?: { model: string; user: string }[];
   caps: LabCaps;
 }
 
@@ -293,6 +295,10 @@ export function compileScenario(flavor: LabFlavor, scenario: LabScenario, modelI
     systemMessage: scenario.system ? { parts: [{ pt: 'text', text: scenario.system }] } : null,
     chatSequence: [
       { role: 'user', parts: [{ pt: 'text', text: scenario.prompt }] },
+      ...(scenario.followups ?? []).flatMap(f => [
+        { role: 'model' as const, parts: [{ pt: 'text' as const, text: f.model }] },
+        { role: 'user' as const, parts: [{ pt: 'text' as const, text: f.user }] },
+      ]),
     ],
     ...(tools.length ? { tools } : {}),
   };

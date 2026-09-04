@@ -15,7 +15,8 @@ export type LlmsOpenAIModelId = typeof _knownOpenAIChatModels[number]['idPrefix'
 // OpenAI Model Variants
 export const hardcodedOpenAIVariants: ModelVariantMap = {
 
-  // GPT-6 Astra: Pro reasoning mode, carried over from 5.6 (not yet probed on Astra; Sol Pro: whole answers, ~1.7K token scaffold)
+  // GPT-6 Astra: Pro reasoning mode, probed live 2026-09-04: the answer streams as one whole delta, ~1.5K input-token scaffold,
+  // orthogonal to effort (low..max), billed at standard rates
   'gpt-6-astra': {
     idVariant: '::pro',
     label: 'GPT-6 Astra Pro',
@@ -171,15 +172,27 @@ export const _knownOpenAIChatModels = llmsDefineModels<_OpenAIModelDef>()([
 
   /// GPT-6 series - released September 3, 2026 (Trusted Access enterprises first; API and ChatGPT plans "in the coming days")
   // Single tier so far; the id is the stable pointer (no dated snapshot, no bare 'gpt-6' alias in the docs).
-  // From the official model page + guide (2026-09-03), not yet live-probed:
-  // - 1,050,000 context (922,000 max input) / 128,000 max output / knowledge cutoff Apr 30, 2026; text+image in, text out
-  // - reasoning.effort: low|medium|high|xhigh|max - 'none' and 'minimal' rejected, so no No-thinking variant; reasoning.mode 'pro' works
-  // - no temperature/top_p/logprobs; tool calling requires the Responses API (Chat Completions: text only)
-  // - tools: web_search, file_search, image_generation, code_interpreter, hosted_shell, apply_patch, skills, computer_use, mcp, tool_search
-  // - priced: 272K tier, 1.25x cache write, $10/1K web search; Flex/Fast via llmVndOaiServiceTier
-  // Shipped alongside, not adopted: async tool calling (`async: true` on tools), mid-turn steering over WebSockets,
-  // `configuration_update` input items (change effort mid-conversation, cache prefix intact), `prompt_cache_options.ttl: '30m'`
-  // replacing `prompt_cache_retention`, asynchronous misalignment monitoring (can stop a conversation for review).
+  // Official model page + guide (2026-09-03); API-verified 2026-09-04 (parameter sweep + raw probes; listed on /v1/models, created 2026-08-27):
+  // - 1,050,000 context (922,000 max input) / 128,000 max output / knowledge cutoff Apr 30, 2026; text+image in (vision verified), text out
+  // - reasoning.effort: low|medium|high|xhigh|max (default medium) - 'none' and 'minimal' 400, so no No-thinking variant; reasoning.mode 'pro' works
+  // - temperature/top_p/logprobs 400; reasoning.context 'all_turns', summary auto|concise|detailed, encrypted reasoning items all accepted
+  // - Chat Completions: text only (function tools 400 at every effort); effort low..xhigh there, 'max' is Responses-only
+  // - tools verified: web_search, image_generation, code_interpreter, function calling (auto/required/roundtrip, multi-turn
+  //   with incremental cache writes); 'shell' and 'apply_patch' hosted tools are accepted (not adopted); computer use is the
+  //   new bare `{ type: 'computer' }` tool (no display params; `computer_use_preview` 400): one computer_call carries an
+  //   `actions[]` batch (screenshot, click, type, keypress), the screenshot returns as computer_call_output.output, no
+  //   current_url - not adopted; file_search, skills, mcp, tool_search not probed
+  // - multi-step hosted loops (reasoning + search + code + search + text in one turn) stream strictly serial with contiguous
+  //   sequence numbers; the AIX parser metrics match the wire usage. Image generation tokens live in tool_usage.image_gen,
+  //   outside usage.output_tokens - not priced by the parser (pre-existing, same on 5.6)
+  // - service_tier flex|fast echoed as served ('priority' still accepted, served as 'fast'; 'auto' serves 'default')
+  // - caching: implicit, 24h retention forced ('in_memory' 400); usage reports cache_write_tokens on a cold >=1K prompt, cached_tokens on replay
+  // - priced: 272K tier, 1.25x cache write, $10/1K web search; Flex/Fast via llmVndOaiServiceTier. Tier switch, cache read/write
+  //   above 272K and cache carry-over across the boundary verified live (198K/297K runs), app cost equal to the hand calculation
+  // Shipped alongside, accepted on probe but not adopted: async tool calling (`async: true` on tools; the function_call item echoes
+  // `async: true` and the model answers before the result), `configuration_update` input items (change effort mid-conversation,
+  // cache prefix intact), `prompt_cache_options.ttl: '30m'` (echoed as mode 'implicit' beside prompt_cache_retention '24h').
+  // Not probed: mid-turn steering over WebSockets, asynchronous misalignment monitoring (can stop a conversation for review).
 
   // GPT-6 Astra - flagship
   {
